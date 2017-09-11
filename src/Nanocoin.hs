@@ -26,39 +26,35 @@ import qualified Nanocoin.Network.RPC as RPC
 
 -- | Initializes a node on the network with it's own copy of
 -- the blockchain, and invokes a p2p server and an http server.
-initNode :: (MonadLogger m, MonadIO m) => Int -> Maybe FilePath -> m ()
-initNode rpcPort mKeysPath = do
+initNode :: Logger.Logger -> Int -> Maybe FilePath -> IO ()
+initNode logger rpcPort mKeysPath = do
   let peer = Peer.mkPeer rpcPort
 
   -- Initialize Node Keys
   keys <- case mKeysPath of
-    Nothing -> liftIO Key.newKeyPair
+    Nothing -> Key.newKeyPair
     Just keysPath -> do
-      eNodeKeys <- liftIO $ Key.readKeys keysPath
+      eNodeKeys <- Key.readKeys keysPath
       case eNodeKeys of
-        Left error   -> do
-          err $ Logger.msg error
-          liftIO . die $ show error
+        Left error   -> die $ show error
         Right keys -> pure keys
 
   -- Initialize Genesis Block
   genesisBlock <- do
-    eKeys <- liftIO $ Key.readKeys "keys/genesis"
+    eKeys <- Key.readKeys "keys/genesis"
     case eKeys of
-      Left error   -> do
-        err (Logger.msg error)
-        liftIO . die $ show error
+      Left error   -> die $ show error
       Right gkeys -> liftIO $ B.genesisBlock gkeys
 
   -- Initialize NodeState
-  nodeState <- liftIO $ Node.initNodeState peer genesisBlock keys
+  nodeState <- Node.initNodeState peer genesisBlock keys
 
   -- Fork P2P server
-  liftIO . forkIO $ P2P.p2p nodeState
+  forkIO $ P2P.p2p logger nodeState
   -- Join network by querying latest block
-  liftIO . joinNetwork $ Node.nodeSender nodeState
+  joinNetwork $ Node.nodeSender nodeState
   -- Run RPC server
-  liftIO $ RPC.rpcServer nodeState
+  RPC.rpcServer nodeState
 
 -- | Query the network for the latest block
 joinNetwork :: Msg.MsgSender -> IO ()
