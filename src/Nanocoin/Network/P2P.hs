@@ -5,7 +5,7 @@ module Nanocoin.Network.P2P (
   p2p,
 ) where
 
-import Protolude hiding (msg, putText)
+import Protolude hiding (msg, putText, print)
 
 import Control.Arrow ((&&&))
 
@@ -27,8 +27,6 @@ import Logger
 -------------------------------------------------------------------------------
 -- P2P
 -------------------------------------------------------------------------------
-putText :: (MonadIO m, MonadLogger m) => Text -> m ()
-putText txt = info (Logger.msg txt)
 
 -- | Initializes a p2p node and returns a sender function so that
 -- the rpc server can broadcast messages to the p2p network
