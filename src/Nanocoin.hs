@@ -1,12 +1,16 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Nanocoin (
   initNode
 ) where
 
-import Protolude hiding (get, put)
+import Protolude hiding (get, put, ask, log)
+import System.Logger.Class
+import qualified System.Logger as Logger
+-- import qualified System.Logger.Message as Logger
 
 import Web.Scotty
 
@@ -22,35 +26,39 @@ import qualified Nanocoin.Network.RPC as RPC
 
 -- | Initializes a node on the network with it's own copy of
 -- the blockchain, and invokes a p2p server and an http server.
-initNode :: Int -> Maybe FilePath -> IO ()
+initNode :: (MonadLogger m, MonadIO m) => Int -> Maybe FilePath -> m ()
 initNode rpcPort mKeysPath = do
   let peer = Peer.mkPeer rpcPort
 
   -- Initialize Node Keys
   keys <- case mKeysPath of
-    Nothing -> Key.newKeyPair
+    Nothing -> liftIO Key.newKeyPair
     Just keysPath -> do
-      eNodeKeys <- Key.readKeys keysPath
+      eNodeKeys <- liftIO $ Key.readKeys keysPath
       case eNodeKeys of
-        Left err   -> die $ show err
+        Left error   -> do
+          err $ Logger.msg error
+          liftIO . die $ show error
         Right keys -> pure keys
 
   -- Initialize Genesis Block
   genesisBlock <- do
-    eKeys <- Key.readKeys "keys/genesis"
+    eKeys <- liftIO $ Key.readKeys "keys/genesis"
     case eKeys of
-      Left err   -> die $ show err
-      Right gkeys -> B.genesisBlock gkeys
+      Left error   -> do
+        err (Logger.msg error)
+        liftIO . die $ show error
+      Right gkeys -> liftIO $ B.genesisBlock gkeys
 
   -- Initialize NodeState
-  nodeState <- Node.initNodeState peer genesisBlock keys
+  nodeState <- liftIO $ Node.initNodeState peer genesisBlock keys
 
   -- Fork P2P server
-  forkIO $ P2P.p2p nodeState
+  liftIO . forkIO $ P2P.p2p nodeState
   -- Join network by querying latest block
-  joinNetwork $ Node.nodeSender nodeState
+  liftIO . joinNetwork $ Node.nodeSender nodeState
   -- Run RPC server
-  RPC.rpcServer nodeState
+  liftIO $ RPC.rpcServer nodeState
 
 -- | Query the network for the latest block
 joinNetwork :: Msg.MsgSender -> IO ()
