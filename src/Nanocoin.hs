@@ -20,20 +20,20 @@ import qualified Nanocoin.Network.P2P as P2P
 import qualified Nanocoin.Network.Peer as Peer
 import qualified Nanocoin.Network.RPC as RPC
 
+-- | Initialize Node Keys
+initKeys :: Maybe FilePath -> IO Key.KeyPair
+initKeys Nothing = Key.newKeyPair
+initKeys (Just keysPath) = do
+    eNodeKeys <- Key.readKeys keysPath
+    case eNodeKeys of
+      Left err   -> die $ show err
+      Right keys -> pure keys
+
 -- | Initializes a node on the network with it's own copy of
 -- the blockchain, and invokes a p2p server and an http server.
-initNode :: Int -> Maybe FilePath -> IO ()
-initNode rpcPort mKeysPath = do
+initNode' :: Int -> Key.KeyPair -> IO ()
+initNode' rpcPort keys = do
   let peer = Peer.mkPeer rpcPort
-
-  -- Initialize Node Keys
-  keys <- case mKeysPath of
-    Nothing -> Key.newKeyPair
-    Just keysPath -> do
-      eNodeKeys <- Key.readKeys keysPath
-      case eNodeKeys of
-        Left err   -> die $ show err
-        Right keys -> pure keys
 
   -- Initialize Genesis Block
   genesisBlock <- do
@@ -51,6 +51,11 @@ initNode rpcPort mKeysPath = do
   joinNetwork $ Node.nodeSender nodeState
   -- Run RPC server
   RPC.rpcServer nodeState
+
+-- | Initializes a node on the network with it's own copy of
+-- the blockchain, and invokes a p2p server and an http server.
+initNode :: Int -> Maybe FilePath -> IO ()
+initNode rpcPort mKeysPath = initNode' rpcPort =<< initKeys mKeysPath
 
 -- | Query the network for the latest block
 joinNetwork :: Msg.MsgSender -> IO ()
